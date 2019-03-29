@@ -5,7 +5,7 @@
  * 
  * Created 3/23/19 by Matthew
  *  
- * "The worst thing I can be is a civil engineer. I hate that."
+ * Windows is for babies. When you grow up you have to use Linux."
  */
  
 #include <SoftwareSerial.h>
@@ -23,9 +23,9 @@ void setup()
 
 void loop() 
 {
-  bool newData = false;
-  unsigned long chars;
-  unsigned short sentences, failed;
+  //bool newData = false;
+  //unsigned long chars;
+  //unsigned short sentences, failed;
 
   /*
   // For one second we parse GPS data and report some key values

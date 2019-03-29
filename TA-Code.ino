@@ -7,8 +7,6 @@
    Created 3/23/19 by Matthew
 
    "Code does not come from winning. Your struggles develop your code. When you go through crashes and decide not to surrender, that is programming."
-   "The worst thing I can be is a civil engineer. I hate that."
-   "Windows is for babies. When you grow up you have to use Linux."
 */
 
 #include <Adafruit_FONA.h>
@@ -22,6 +20,7 @@
 #define FONA_TX  8
 #define FONA_RST 4
 #define FONA_RI  7
+
 
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
@@ -37,7 +36,7 @@ SoftwareSerial gpsSS(4, 3);
 #endif
 
 // Project variables, no concern for most people
-int debugMode = 0;
+int debugMode = 2;
 
 //Timer variables
 unsigned long fonaTimer = 0;
@@ -51,11 +50,11 @@ char replybuffer[255];
 void setup()
 {
   // Begin serial communications
-  Serial.begin(38400);
-  fonaSerial->begin(4800);
+  Serial.begin(115200);
+  //fonaSerial->begin(4800);
   gpsSS.begin(9600);
-
-
+  
+  /**
   // Print SIM card IMEI number.
   char imei[16] = {0}; // MUST use a 16 character buffer for IMEI!
   uint8_t imeiLen = fona.getIMEI(imei);
@@ -68,25 +67,36 @@ void setup()
   {
     debugLog("e", "SIM card error. No IMEI Found.");
   }
-
+  **/
+  debugLog('d', F("Setup completed."));
 }
 
 void loop()
 {
   // Update variables and stuff BEFORE any periodic actions should happen
 
-
-  if (Serial.read()) // Look for data on the serial bus, and parse it
+  // Look for data on the serial bus, and parse it
+  if (Serial.available()) 
   {
-    parseCommand(Serial.read());
+    parseCommand(Serial.readString());
   }
-  periodicActions();
+  
+  periodicActions(); // Things that should happen on every loop of the processor
+  /**
+  // Forces the program to wait 5 seconds after bootup to start doing stuff
+  // Important because the MPU gives wacky values for a bit on first startup
+  if(millis() > 5000) 
+  {
+    periodicActions(); // Things that should happen on every loop of the processor
+  }
+   */
 }
 
 
 // Actions scheduled to run at certain times, all the millis stuff goes here
 void periodicActions()
 {
+  /**
   // Check FONA for new SMS every two seconds
   if (millis() - fonaTimer > 2000)
   {
@@ -99,7 +109,7 @@ void periodicActions()
     }
     fonaTimer = millis();
   }
-
+  **/
   // Constantly encode GPS data, so that we might get a full sentence when needed
   if (gpsSS.available())
   {
@@ -122,12 +132,12 @@ void parseAllSMS()
   int8_t smsn;
   for (int i = 1; i < (smsnum + 1); i++)
   {
-    debugLog("d", "SMS Number " + i);
+    debugLog('d', "SMS Number " + i);
     fona.readSMS(i, replybuffer, 250, &smslen);
-    debugLog("d", replybuffer);
+    debugLog('d', replybuffer);
     parseCommand(String(replybuffer));
     fona.deleteSMS(i);
-    debugLog("w", "Message has been deleted.");
+    debugLog('w', F("Message has been deleted."));
   }
 }
 
@@ -140,51 +150,52 @@ struct coordinates
 };
 
 // Reads GPS Data and returns the latitude and longitude
-struct coordinates getGPS() // TODO: Return data
+struct coordinates getGPS()
 {
   struct coordinates coord;
   float flat, flon;
   unsigned long age;
   gps.f_get_position(&flat, &flon, &age); // TODO: Remove age thing?
-  Serial.print("LAT=");
-  Serial.print(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat, 6); 
-  Serial.print(" LON=");
-  Serial.println(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 6);
+  //Serial.print("LAT=");
+  //Serial.print(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat, 6); 
+  //Serial.print(" LON=");
+  //Serial.println(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 6);
   coord.lat = flat;
   coord.lon = flon;
   // TODO: Remove print statements
   return coord;
 }
 
-// Convert a coordinates structure to a google maps link for transmission
+// Convert a coordinates structure to a google maps link (string) for transmission
 String toMapsLink(struct coordinates coord)
 {
   String mapLink;
-  String latString; latString = String(coord.lat);
-  String lonString; lonString = String(coord.lon);
+  String latString; latString = String(coord.lat, 6);
+  String lonString; lonString = String(coord.lon, 6);
   mapLink = "http://www.google.com/maps/place/" + latString + "," + lonString;
   return mapLink;
 }
 
 // A helper function to manage logging to the serial console
-// Has 3 log levels, Debug (2, highest), Warn (1, medium), and Error (0, lowest)
+// Has 3 log levels: Debug (2, highest), Warn (1, medium), and Error (0, lowest)
+// Always prints errors, and the logging level can be increased to reveal more information
 void debugLog(char level, String message)
 {
-  if (level == "e")
+  if (level == 'e')
   {
-    Serial.print("[ERROR] ");
+    Serial.print(F("[ERROR] "));
     Serial.println(message);
   }
 
-  if (level == "w" && debugMode >= 1)
+  if (level == 'w' && debugMode >= 1)
   {
-    Serial.print("[WARNING] ");
+    Serial.print(F("[WARNING] "));
     Serial.println(message);
   }
 
-  if (level == "d" && debugMode >= 2)
+  if (level == 'd' && debugMode >= 2)
   {
-    Serial.print("[DEBUG] ");
+    Serial.print(F("[DEBUG] "));
     Serial.println(message);
   }
 }
@@ -193,16 +204,32 @@ void debugLog(char level, String message)
 // Used to get commands from SMS and serial; reusable!
 void parseCommand(String command)
 {
-  if (command == "foo")
+  debugLog('d', "Parsing command: " + command);
+  if(command == "foo")
   {
-    debugLog("d", "Bar");
+    debugLog('d', F("Bar"));
   }
-  if (command == "location")
+  else if(command == "location")
   {
-    debugLog("d", toMapsLink(getGPS()));
+    debugLog('d', toMapsLink(getGPS()));
+  }
+  else if(command == "dMode0")
+  {
+    debugLog('w', F("Setting debug mode to 0..."));
+    debugMode = 0;
+  }
+  else if(command == "dMode1")
+  {
+    debugLog('w', F("Setting debug mode to 1..."));
+    debugMode = 1;
+  }
+  else if(command == "dMode2")
+  {
+    debugLog('w', F("Setting debug mode to 2..."));
+    debugMode = 2;
   }
   else
   {
-    debugLog("e", "Command: " + command + "Not Recognized");
+    debugLog('e', "Command: " + command + " Not Recognized");
   }
 }
