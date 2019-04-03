@@ -36,7 +36,6 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
 // ================================================================
-
 volatile bool mpuInterrupt = false; // indicates whether MPU interrupt pin has gone high
 void dmpDataReady() // Executed when interrupt detected. Done automatically by processor
 {
@@ -50,7 +49,6 @@ void setup()
 {
   // Just a few variables, don't mind them
   uint8_t devStatus; // status after each device operation (0 = success, !0 = error)
-
 
   // Join the wire bus
   Wire.begin();
@@ -112,7 +110,9 @@ void setup()
 // ================================================================
 // ===                    MAIN PROGRAM LOOP                     ===
 // ================================================================
-bool doCheckAccel = false;
+bool doCheckAccel = false; // Should we check for accel data from MPU?
+bool highG = false; // Has a high-G event been detected?
+int gAlarmThreshold = 18;
 void loop()
 {
   /**
@@ -126,8 +126,8 @@ void loop()
     }
 
     } **/
-
-  if (mpuInterrupt && !fifoCount < packetSize)
+  
+  if (mpuInterrupt && !fifoCount < packetSize) // An interrupt has been processed and the fifo is full
   {
     // reset interrupt flag and get INT_STATUS byte
     mpuInterrupt = false;
@@ -139,7 +139,19 @@ void loop()
   {
     checkAccel();
   }
-  //Serial.println(vectorMag);
+  Serial.println(aaReal.getMagnitude());
+  
+  if((aaReal.getMagnitude()/1000) > gAlarmThreshold)
+  {
+    highG = true;
+  }
+/*
+  if(highG)
+  {
+    Serial.println("[ALERT] Impact detected!");
+    highG = false; // Reset the flag
+  }
+  */
 }
 
 // After an interrupt is detected, get the actual data from the accelerometer
@@ -170,7 +182,6 @@ void checkAccel()
     mpu.dmpGetAccel(&aa, fifoBuffer);
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity); // Stores real acceleration into the aaReal struct
-
     /*
           Serial.print("areal\t");
           Serial.print(aaReal.x);
@@ -182,7 +193,6 @@ void checkAccel()
     */
     //Serial.print("Magnitude\t");
     //Serial.println(vectorMag());
-    Serial.println(aaReal.getMagnitude());
     //debugMag();
     // If the buffer is less than a packet, we can reset and wait for another interrupt
     if (fifoCount < packetSize)

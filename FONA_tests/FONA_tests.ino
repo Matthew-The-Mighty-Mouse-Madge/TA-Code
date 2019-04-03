@@ -64,14 +64,6 @@ unsigned long oldTime = 0;
 
 void loop() 
 {
-  /**
-  if (fona.available())      //any data available from the FONA?
-  {
-    checkSMS();
-  }
-  */
-  
-
   if(millis() - oldTime > 2000)
   {
     int8_t smsnum = fona.getNumSMS();
@@ -98,9 +90,6 @@ void loop()
     oldTime = millis();
   }
 }
-
-
-
 
 
 void checkSMS()
@@ -168,4 +157,9 @@ void checkSMS()
         fona.print(F("AT+CMGD=?\r\n"));
       }
     }
+}
+
+void sendSMS(char sendto[21], char message[141])
+{
+  fona.sendSMS(sendto, message);
 }

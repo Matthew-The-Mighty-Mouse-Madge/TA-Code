@@ -9,11 +9,14 @@
    "Code does not come from winning. Your struggles develop your code. When you go through crashes and decide not to surrender, that is programming."
 */
 
+
 #include <Adafruit_FONA.h>
-#include <TinyGPS.h>
-#include <I2Cdev.h>
-#include <MPU6050.h>
+//#include <TinyGPS.h>
+//#include <I2Cdev.h>
+//#include "MPU6050_6Axis_MotionApps20.h"
+//#include "Wire.h"
 #include <SoftwareSerial.h>
+
 
 // FONA Pin definitions
 #define FONA_RX  9
@@ -21,42 +24,83 @@
 #define FONA_RST 4
 #define FONA_RI  7
 
+#define INTERRUPT_PIN 2  // use pin 2 on Arduino Uno & most boards
 
 SoftwareSerial fonaSS = SoftwareSerial(FONA_TX, FONA_RX);
 SoftwareSerial *fonaSerial = &fonaSS;
 Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
-
+/*
 TinyGPS gps;
 SoftwareSerial gpsSS(4, 3);
+//SoftwareSerial gpsSS(13, 12); // Use on feather
 
-// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
-// is used in I2Cdev.h
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-#include "Wire.h"
-#endif
-
+MPU6050 mpu;
+*/
 // Project variables, no concern for most people
 int debugMode = 2;
+bool doCheckAccel = false; // FLAG. Tells the program if it should be checking the acceleration
+
 
 //Timer variables
 unsigned long fonaTimer = 0;
 
 // FONA buffers for dealing with SMS stuff
 char replybuffer[255];
+/*
+// MPU control/status vars
+uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
+uint16_t fifoCount;     // count of all bytes currently in FIFO
+uint8_t fifoBuffer[64]; // FIFO storage buffer
+
+// MPU orientation/motion vars
+Quaternion q;           // [w, x, y, z]         quaternion container
+VectorFloat aa;         // [x, y, z]            accel sensor measurements
+VectorFloat aaReal;     // [x, y, z]            gravity-free accel sensor measurements
+//VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
+VectorFloat gravity;    // [x, y, z]            gravity vector
+
+// ================================================================
+// ===               INTERRUPT DETECTION ROUTINE                ===
+// ================================================================
+volatile bool mpuInterrupt = false; // indicates whether MPU interrupt pin has gone high
+void dmpDataReady() // Executed when interrupt detected. Done automatically by processor
+{
+  mpuInterrupt = true;
+}
+
+*/
+/*************************
+ * Configuration variables
+ *************************/
+int gAlarmThreshold = 18; // Threshold for a High-G event
+//char phoneNumber[] = {'+', '1','9','4','9','2','9','1','7','4','1','9'};
+#define phoneNumber "+19492917419"
 
 /**************************************
    MAIN CODE BLOC. DOES THE MAIN STUFF
  **************************************/
 void setup()
 {
+  // Just a few variables, don't mind them
+  //uint8_t devStatus; // status after each device operation (0 = success, !0 = error)
+
+  pinMode(13, OUTPUT);
   // Begin serial communications
-  Serial.begin(115200);
-  //fonaSerial->begin(4800);
-  gpsSS.begin(9600);
-  
-  /**
+  Serial.begin(9600);
+  fonaSerial->begin(4800);
+  fona.begin(*fonaSerial);
+  //gpsSS.begin(9600);
+
+  // Join the wire bus
+  //Wire.begin();
+  //Wire.setClock(400000);
+
+  // Pin modes
+  //pinMode(INTERRUPT_PIN, INPUT);
+
   // Print SIM card IMEI number.
-  char imei[16] = {0}; // MUST use a 16 character buffer for IMEI!
+  char imei[16] = {}; // MUST use a 16 character buffer for IMEI!
   uint8_t imeiLen = fona.getIMEI(imei);
   if (imeiLen > 0)
   {
@@ -67,7 +111,49 @@ void setup()
   {
     debugLog("e", "SIM card error. No IMEI Found.");
   }
-  **/
+
+  /*
+   * MPU Setup
+   */
+ /*
+   mpu.initialize();
+   debugLog('d', F("Initializing DMP."));
+   devStatus = mpu.dmpInitialize(); // Initialize the DMP, and get its status
+
+   // Gyro offsets, scaled for min sensitivity
+    mpu.setXGyroOffset(-949);
+  mpu.setYGyroOffset(-29);
+  mpu.setZGyroOffset(188);
+  mpu.setZAccelOffset(1447);
+
+  // Ensure initialization worked (returns 0 if so)
+  // Copied from MPU6050 library example code
+  if (devStatus == 0)
+  {
+    mpu.setDMPEnabled(true);
+
+    // enable Arduino interrupt detection
+    attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
+    mpuIntStatus = mpu.getIntStatus();
+
+    // get expected DMP packet size for later comparison
+    packetSize = mpu.dmpGetFIFOPacketSize();
+    debugLog('d', F("DMP Initialization success!"));
+  }
+  else
+  {
+    // ERROR!
+    // 1 = initial memory load failed
+    // 2 = DMP configuration updates failed
+    // (if it's going to break, usually the code will be 1)
+    Serial.print(F("DMP Initialization failed (code "));
+    Serial.print(devStatus);
+    Serial.println(F(")"));
+    debugLog('e', F("DMP Initialization failed. Code: "));
+    debugLog('e', devStatus);
+  }
+  */
+   
   debugLog('d', F("Setup completed."));
 }
 
@@ -96,7 +182,6 @@ void loop()
 // Actions scheduled to run at certain times, all the millis stuff goes here
 void periodicActions()
 {
-  /**
   // Check FONA for new SMS every two seconds
   if (millis() - fonaTimer > 2000)
   {
@@ -109,13 +194,37 @@ void periodicActions()
     }
     fonaTimer = millis();
   }
-  **/
+/*
   // Constantly encode GPS data, so that we might get a full sentence when needed
   if (gpsSS.available())
   {
     char c = gpsSS.read();
     gps.encode(c);
   }
+  */
+  /*
+  // Check to see if an MPU interrupt is detected, and if the FIFO buffer is full
+  if (mpuInterrupt && !fifoCount < packetSize)
+  {
+    // reset interrupt flag and get INT_STATUS byte from the MPU
+    mpuInterrupt = false;
+    mpuIntStatus = mpu.getIntStatus(); // Get interrupt status directly from the MPU. Should be true
+    doCheckAccel = true; // We should check the acceleration
+  }
+
+  // Check for a High-G event
+  if((aaReal.getMagnitude()/1000) > gAlarmThreshold)
+  {
+    debugLog('w', F("High-G event detected!"));
+    // TODO: Trigger an SMS Alert
+  }
+
+  // Controls checking of acceleration from MPU. Based on flag variable, controlled by interrupt and FIFO size
+  if(doCheckAccel)
+  {
+    checkAccel();
+  }
+  */
 }
 
 
@@ -141,8 +250,59 @@ void parseAllSMS()
   }
 }
 
+void sendSMS(char sendto[], char message[])
+{
+  fona.sendSMS(phoneNumber, message);
+}
+// A utility function to get data from the MPU. Called after an interrupt is processed
+// Checks for FIFO overflow, and if there's sufficient data reads it into the aaReal Struct
+// Stores real acceleration, adjusted to remove gravity
+/*
+void checkAccel()
+{
+  // get current FIFO count
+  fifoCount = mpu.getFIFOCount();
+
+  // check for overflow (this should never happen unless our code is too inefficient)
+  if ((mpuIntStatus & _BV(MPU6050_INTERRUPT_FIFO_OFLOW_BIT)) || fifoCount >= 1024)
+  {
+    // reset so we can continue cleanly
+    mpu.resetFIFO();
+    fifoCount = mpu.getFIFOCount();
+    debugLog('w', F("FIFO Overflow!"));
+  }
+  else if (!fifoCount < packetSize) // If there's enough data in the FIFO buffer to be read
+  {
+    // Actually read the packet from the FIFO
+    mpu.getFIFOBytes(fifoBuffer, packetSize);
+
+    // track FIFO count here in case there is > 1 packet available
+    // (this lets us immediately read more without waiting for an interrupt)
+    fifoCount -= packetSize;
+
+    // display real acceleration, adjusted to remove gravity
+    mpu.dmpGetQuaternion(&q, fifoBuffer); // TODO: Can we do without the Quaternion?
+    mpu.dmpGetAccel(&aa, fifoBuffer);
+    mpu.dmpGetGravity(&gravity, &q);
+    mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity); // Stores real acceleration into the aaReal struct
+          Serial.print("areal\t");
+          Serial.print(aaReal.x);
+          Serial.print("\t");
+          Serial.print(aaReal.y);
+          Serial.print("\t");
+          Serial.print(aaReal.z);
+          Serial.print("\t");
+
+    // If the buffer size is less than a packet, we can reset and wait for another interrupt
+    if (fifoCount < packetSize)
+    {
+      doCheckAccel = false; // Reset check variable
+    }
+  }
+}
+
 // Structure to hold the GPS coordinates
-// Makes it easy to pass around, like some sort of hot potato, or deformed kick ball
+// Makes it easy to pass around, like some sort of digital hot potato, or deformed kick ball
 struct coordinates
 {
   float lat;
@@ -175,7 +335,7 @@ String toMapsLink(struct coordinates coord)
   mapLink = "http://www.google.com/maps/place/" + latString + "," + lonString;
   return mapLink;
 }
-
+*/
 // A helper function to manage logging to the serial console
 // Has 3 log levels: Debug (2, highest), Warn (1, medium), and Error (0, lowest)
 // Always prints errors, and the logging level can be increased to reveal more information
@@ -207,11 +367,14 @@ void parseCommand(String command)
   debugLog('d', "Parsing command: " + command);
   if(command == "foo")
   {
+    digitalWrite(13, HIGH);
+    //sendSMS(phoneNumber, 'b'); // TODO: Fix this!
+    fona.sendSMS(phoneNumber, "bar");
     debugLog('d', F("Bar"));
   }
   else if(command == "location")
   {
-    debugLog('d', toMapsLink(getGPS()));
+    //debugLog('d', toMapsLink(getGPS()));
   }
   else if(command == "dMode0")
   {
