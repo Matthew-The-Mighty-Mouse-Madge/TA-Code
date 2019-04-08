@@ -52,6 +52,7 @@ Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 // Project variables, no concern for most people
 int debugMode = 2;
 bool doCheckAccel = false; // FLAG. Tells the program if it should be checking the acceleration
+bool validGPS = false; // FLAG. Used to see if the GPS is giving us real data
 
 
 //Timer variables
@@ -82,7 +83,7 @@ char replybuffer[255];
   volatile bool mpuInterrupt = false; // indicates whether MPU interrupt pin has gone high
   void dmpDataReady() // Executed when interrupt detected. Done automatically by processor
   {
-  mpuInterrupt = true;
+    mpuInterrupt = true;
   }
 
 */
@@ -98,7 +99,7 @@ int gAlarmThreshold = 18; // Threshold for a High-G event
 void setup()
 {
   // Just a few variables, don't mind them
-  //uint8_t devStatus; // status after each device operation (0 = success, !0 = error)
+  uint8_t devStatus; // status after each device operation (0 = success, !0 = error)
 
   // Pin modes
   pinMode(13, OUTPUT);
@@ -198,7 +199,14 @@ void loop()
       if (gpsSS.available())
       {
         char c = gpsSS.read();
-        gps.encode(c);
+        if(gps.encode(c))
+        {
+          validGPS = true;
+        }
+        else
+        {
+          validGPS = false;
+        }
       }
 
       // Check to see if an MPU interrupt is detected, and if the FIFO buffer is full
@@ -215,6 +223,8 @@ void loop()
       {
         debugLog('w', F("High-G event detected!"));
         // TODO: Trigger an SMS Alert
+        fona.sendSMS(phoneNumber, "Impact detected!");
+        fona.sendSMS(phoneNumber, toMapsLink(getGPS())); // Send a maps link with current location
       }
 
       // Controls checking of acceleration from MPU. Based on flag variable, controlled by interrupt and FIFO size
@@ -254,8 +264,16 @@ void periodicActions()
     } 
     else 
     {
-      Serial.print(F("VPct = ")); Serial.print(vbat); Serial.println(F("%"));
-      // Do other stuff with voltage here
+      //Serial.print(F("VPct = ")); Serial.print(vbat); Serial.println(F("%"));
+      if(vbat < 20)
+      {
+        digitalWrite(BATT_STATUS_PIN, HIGH);
+        debugLog('w', F("Battery less than 20%!"); // TODO: Remove console spam
+      }
+      else
+      {
+        digitalWrite(BATT_STATUS_PIN, LOW);
+      }
     }
   }
 
@@ -285,7 +303,14 @@ void periodicActions()
   // Check GPS status every two seconds
   if(millis() - gpsTimer > 2000)
   {
-    // Do stuff here
+    if(validGPS)
+    {
+      digitalWrite(GPS_STATUS_PIN, HIGH);
+    }
+    else
+    {
+      digitalWrite(GPS_STATUS_PIN, LOW);
+    }
   }
 }
 
@@ -294,11 +319,11 @@ void periodicActions()
    SOVIET CODE BLOC. FUNCTION OWNED BY EVERYBODY, LIKE TRUE COMMUNISM.
  ********************************************************************/
 
-// Grabs all SMS found onm the SIM card and passes them to the command parser
+// Grabs all SMS found on the SIM card and passes them to the command parser
 // Deletes them after parsing
 void parseAllSMS()
 {
-  int8_t smsnum = fona.getNumSMS();
+  int8_t smsnum = fona.getNumSMS(); // Gets number of SMS's stored on the SIM card
   uint16_t smslen;
   int8_t smsn;
   for (int i = 1; i < (smsnum + 1); i++)
@@ -306,16 +331,12 @@ void parseAllSMS()
     debugLog('d', "SMS Number " + i);
     fona.readSMS(i, replybuffer, 250, &smslen);
     debugLog('d', replybuffer);
-    parseCommand(String(replybuffer));
+    parseCommand(String(replybuffer)); // Try to parse the received SMS as a command
     fona.deleteSMS(i);
     debugLog('w', F("Message has been deleted."));
   }
 }
 
-void sendSMS(char sendto[], char message[])
-{
-  fona.sendSMS(phoneNumber, message);
-}
 // A utility function to get data from the MPU. Called after an interrupt is processed
 // Checks for FIFO overflow, and if there's sufficient data reads it into the aaReal Struct
 // Stores real acceleration, adjusted to remove gravity
@@ -431,13 +452,13 @@ void parseCommand(String command)
   if (command == "foo")
   {
     digitalWrite(13, HIGH);
-    //sendSMS(phoneNumber, 'b'); // TODO: Fix this!
     fona.sendSMS(phoneNumber, "bar");
     debugLog('d', F("Bar"));
   }
   else if (command == "location")
   {
     //debugLog('d', toMapsLink(getGPS()));
+    //fona.sendSMS(phoneNumber, toMapsLink(getGPS())); // Send a maps link with current location
   }
   else if (command == "dMode0")
   {
@@ -459,5 +480,4 @@ void parseCommand(String command)
     debugLog('e', "Command: " + command + " Not Recognized");
   }
 }
-
 // My life is a lie.
