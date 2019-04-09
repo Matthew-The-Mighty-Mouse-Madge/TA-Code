@@ -87,11 +87,39 @@ void loop()
         Serial.println(" has been deleted.");
       }
     }
+    uint8_t n = fona.getNetworkStatus();
+    if (n == 1 || n == 5)
+    {
+      Serial.println("Service!");
+    }
+    else
+    {
+      Serial.println("No service!");
+    }
+
+    uint16_t vbat;
+    // From Adafruit FONA example code
+    if (!fona.getBattPercent(&vbat))
+    {
+      Serial.println("Couldn't read battery!");
+    }
+    else
+    {
+      //Serial.print(F("VPct = ")); Serial.print(vbat); Serial.println(F("%"));
+      if (vbat < 20)
+      {
+        Serial.println("Low battery!");
+      }
+      else
+      {
+        Serial.println("Good battery!");
+      }
+    }
     oldTime = millis();
   }
 }
 
-
+/*
 void checkSMS()
 {
   char* bufPtr = fonaNotificationBuffer;    //handy buffer pointer
@@ -141,7 +169,7 @@ void checkSMS()
         Serial.println(F("Sent!"));
       }
       **/
-      
+      /*
       digitalWrite(13, HIGH);
       
       // delete the original msg after it is processed
@@ -157,7 +185,9 @@ void checkSMS()
         fona.print(F("AT+CMGD=?\r\n"));
       }
     }
-}
+    */
+//}
+
 
 void sendSMS(char sendto[21], char message[141])
 {

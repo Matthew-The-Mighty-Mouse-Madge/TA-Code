@@ -16,7 +16,7 @@
 //Create the MPU object
 MPU6050 mpu;
 
-#define INTERRUPT_PIN 2  // use pin 2 on Arduino Uno & most boards
+#define INTERRUPT_PIN 0  // use pin 2 on Arduino Uno & most boards
 #define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
 bool blinkState = false;
 
@@ -47,13 +47,14 @@ void dmpDataReady() // Executed when interrupt detected. Done automatically by p
 // ================================================================
 void setup()
 {
+  Serial.begin(9600);
+  Serial.println("Beginning setup");
   // Just a few variables, don't mind them
   uint8_t devStatus; // status after each device operation (0 = success, !0 = error)
 
   // Join the wire bus
   Wire.begin();
-  Wire.setClock(400000);
-  Serial.begin(115200);
+  //Wire.setClock(400000);
 
   mpu.initialize();
   pinMode(INTERRUPT_PIN, INPUT);
@@ -104,7 +105,7 @@ void setup()
 
   // configure LED for output
   pinMode(LED_PIN, OUTPUT);
-
+  Serial.println("Setup complete.");
 }
 
 // ================================================================
@@ -126,9 +127,10 @@ void loop()
     }
 
     } **/
-  
+  fifoCount = mpu.getFIFOCount();
   if (mpuInterrupt && !fifoCount < packetSize) // An interrupt has been processed and the fifo is full
   {
+    Serial.println("Interrupt");
     // reset interrupt flag and get INT_STATUS byte
     mpuInterrupt = false;
     mpuIntStatus = mpu.getIntStatus(); // Get interrupt status directly from the MPU. Should be true
@@ -139,7 +141,7 @@ void loop()
   {
     checkAccel();
   }
-  Serial.println(aaReal.getMagnitude());
+  //Serial.println(aaReal.getMagnitude());
   
   if((aaReal.getMagnitude()/1000) > gAlarmThreshold)
   {
@@ -182,18 +184,19 @@ void checkAccel()
     mpu.dmpGetAccel(&aa, fifoBuffer);
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity); // Stores real acceleration into the aaReal struct
-    /*
+
           Serial.print("areal\t");
           Serial.print(aaReal.x);
           Serial.print("\t");
           Serial.print(aaReal.y);
           Serial.print("\t");
           Serial.print(aaReal.z);
-          Serial.print("\t");
-    */
+          Serial.println("\t");
+
     //Serial.print("Magnitude\t");
     //Serial.println(vectorMag());
     //debugMag();
+    fifoCount = mpu.getFIFOCount();
     // If the buffer is less than a packet, we can reset and wait for another interrupt
     if (fifoCount < packetSize)
     {

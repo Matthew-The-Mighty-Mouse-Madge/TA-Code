@@ -9,16 +9,20 @@
  */
  
 #include <SoftwareSerial.h>
+#include <AltSoftSerial.h>
 #include <TinyGPS.h>
 
 TinyGPS gps;
-SoftwareSerial ss(4, 3);
+//SoftwareSerial ss(4, 3);
+AltSoftSerial ss;
+
+unsigned long timer = 0;
  
 void setup() 
 {
-  Serial.begin(38400);
+  Serial.begin(9600);
   ss.begin(9600);
-  pinMode(6, INPUT);
+  //pinMode(6, INPUT);
 }
 
 void loop() 
@@ -52,9 +56,10 @@ void loop()
   if(ss.available())
   {
     char c = ss.read();
+    //Serial.println(c);
     gps.encode(c);
   }
-  
+  /*
   if(digitalRead(5))
   {
     float flat, flon;
@@ -65,6 +70,20 @@ void loop()
     Serial.print(" LON=");
     Serial.println(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 6);
   }
+  */
+  if(millis() - timer > 2000)
+  {
+    float flat, flon;
+    unsigned long age;
+    gps.f_get_position(&flat, &flon, &age);
+    Serial.print("LAT=");
+    Serial.print(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat, 6);
+    Serial.print(" LON=");
+    Serial.println(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 6);
+    timer = millis();
+  }
+
+  
 /*
   if (newData)
   {
