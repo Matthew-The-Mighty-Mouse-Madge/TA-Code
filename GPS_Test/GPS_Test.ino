@@ -12,16 +12,19 @@
 #include <AltSoftSerial.h>
 #include <TinyGPS.h>
 
+//#define ss Serial1
+
 TinyGPS gps;
 //SoftwareSerial ss(4, 3);
-AltSoftSerial ss;
+//AltSoftSerial ss;
 
 unsigned long timer = 0;
  
 void setup() 
 {
   Serial.begin(9600);
-  ss.begin(9600);
+  //ss.begin(9600);
+  Serial1.begin(9600);
   //pinMode(6, INPUT);
 }
 
@@ -53,9 +56,9 @@ void loop()
   }
   */
 
-  if(ss.available())
+  if(Serial1.available())
   {
-    char c = ss.read();
+    char c = Serial1.read();
     //Serial.println(c);
     gps.encode(c);
   }

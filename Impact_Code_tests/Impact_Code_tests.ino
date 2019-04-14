@@ -54,7 +54,7 @@ void setup()
 
   // Join the wire bus
   Wire.begin();
-  //Wire.setClock(400000);
+  Wire.setClock(400000);
 
   mpu.initialize();
   pinMode(INTERRUPT_PIN, INPUT);
@@ -68,10 +68,10 @@ void setup()
   devStatus = mpu.dmpInitialize();
 
   // Gyro offsets, scaled for min sensitivity
-  mpu.setXGyroOffset(-949);
-  mpu.setYGyroOffset(-29);
-  mpu.setZGyroOffset(188);
-  mpu.setZAccelOffset(1447);
+  mpu.setXGyroOffset(-970);
+  mpu.setYGyroOffset(-27);
+  mpu.setZGyroOffset(206);
+  //mpu.setZAccelOffset(1447); // DEPRECATE
 
   // Ensure initialization worked (returns 0 if so)
   if (devStatus == 0)
@@ -84,7 +84,6 @@ void setup()
     Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
     Serial.print(digitalPinToInterrupt(INTERRUPT_PIN));
     Serial.println(F(")..."));
-
 
     attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
     mpuIntStatus = mpu.getIntStatus();
@@ -130,11 +129,12 @@ void loop()
   fifoCount = mpu.getFIFOCount();
   if (mpuInterrupt && !fifoCount < packetSize) // An interrupt has been processed and the fifo is full
   {
-    Serial.println("Interrupt");
+    //Serial.println("Interrupt");
     // reset interrupt flag and get INT_STATUS byte
     mpuInterrupt = false;
     mpuIntStatus = mpu.getIntStatus(); // Get interrupt status directly from the MPU. Should be true
     doCheckAccel = true; // We should check the acceleration
+    digitalWrite(13, HIGH);
   }
 
   if (doCheckAccel) // Let's check the acceleration
@@ -147,13 +147,12 @@ void loop()
   {
     highG = true;
   }
-/*
+
   if(highG)
   {
     Serial.println("[ALERT] Impact detected!");
     highG = false; // Reset the flag
   }
-  */
 }
 
 // After an interrupt is detected, get the actual data from the accelerometer
@@ -201,6 +200,7 @@ void checkAccel()
     if (fifoCount < packetSize)
     {
       doCheckAccel = false; // Reset check variable
+      digitalWrite(13, LOW);
     }
   }
 }

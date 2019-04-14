@@ -12,10 +12,11 @@
 #include <Adafruit_FONA.h>
 #include <TinyGPS.h>
 #include <I2Cdev.h>
-#include "MPU6050_6Axis_MotionApps20.h"
+//#include "MPU6050_6Axis_MotionApps20.h"
+#include "MPU6050.h"
 #include "Wire.h"
 #include <SoftwareSerial.h>
-#include <AltSoftSerial.h>
+//#include <AltSoftSerial.h>
 
 /*************************
    Configuration variables
@@ -31,7 +32,7 @@ const short gpsCounterDefault = 2000; // Number of invalid GPS sentences to acce
 #define FONA_RI  7
 
 // MPU Pin definitions (FEATHER)
-#define INTERRUPT_PIN 1 // Feather
+//#define INTERRUPT_PIN 0 // Feather
 //#define INTERRUPT_PIN 2 // Uno
 #define MPU_SLC 3
 #define MPU_SDA 2
@@ -52,8 +53,8 @@ Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
 TinyGPS gps;
 //SoftwareSerial gpsSS(4, 3); // Standard UNO config
-AltSoftSerial gpsSS; // Use on feather
-
+//AltSoftSerial gpsSS; // Use on feather
+#define gpsSS Serial1
 
 MPU6050 mpu;
 
@@ -62,18 +63,22 @@ int debugMode = 2;
 bool doCheckAccel = false; // FLAG. Tells the program if it should be checking the acceleration
 bool validGPS = false; // FLAG. Used to see if the GPS is giving us real data
 short gpsCounter = gpsCounterDefault; // Counts down with the number of invalid sentences encoded by the GPS. Throws an error when it hits zero.
-
+int highGCounter = 0; // Tracks the number of High-G events detected in a row. When this exceeds a certain ammount, an alert is triggered
+bool prevGAlarm = false; // Tells if the acceleration vector was previously in an alarm state
+bool highGAlarm = false; // If a high-G condition is detected, and an alert should be sent
 
 //Timer variables
 unsigned long smsTimer = 0;
 unsigned long battTimer = 0;
 unsigned long gpsTimer = 0;
 unsigned long cellServiceTimer = 0;
+unsigned long mpuMicroTimer = 0;
+unsigned long highGAlarmTimer = 0;
 
 // FONA buffers for dealing with SMS stuff
 char replybuffer[255];
 
-
+/*
 // MPU control/status vars
 uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
 uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
@@ -86,7 +91,12 @@ VectorFloat aa;         // [x, y, z]            accel sensor measurements
 VectorFloat aaReal;     // [x, y, z]            gravity-free accel sensor measurements
 //VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
 VectorFloat gravity;    // [x, y, z]            gravity vector
+*/ // DEPRECATE
 
+// MPU Variables
+int16_t gx, gy, gz;
+
+/*
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
 // ================================================================
@@ -96,6 +106,16 @@ void dmpDataReady() // Executed when interrupt detected. Done automatically by p
 {
   mpuInterrupt = true;
 }
+*/ // DEPRECATE
+
+// Structure to hold the GPS coordinates
+// Makes it easy to pass around, like some sort of digital hot potato, or deformed kick ball
+struct coordinates
+{
+  float lat;
+  float lon;
+};
+
 
 /**************************************
    MAIN CODE BLOC. DOES THE MAIN STUFF
@@ -103,13 +123,13 @@ void dmpDataReady() // Executed when interrupt detected. Done automatically by p
 void setup()
 {
   // Just a few variables, don't mind them
-  uint8_t devStatus; // status after each device operation (0 = success, !0 = error)
+  //uint8_t devStatus; // status after each device operation (0 = success, !0 = error)
 
   // Pin modes
   pinMode(BATT_STAT_PIN, OUTPUT);
   pinMode(CELL_STAT_PIN, OUTPUT);
   pinMode(GPS_STAT_PIN, OUTPUT);
-  pinMode(INTERRUPT_PIN, INPUT);
+  //pinMode(INTERRUPT_PIN, INPUT);
 
   // Begin serial communications
   Serial.begin(9600);
@@ -120,34 +140,37 @@ void setup()
 
   // Join the wire bus
   Wire.begin();
-  Wire.setClock(400000);
+  //Wire.setClock(400000);
 
   // Print SIM card IMEI number.
   char imei[16] = {}; // MUST use a 16 character buffer for IMEI!
   uint8_t imeiLen = fona.getIMEI(imei);
   if (imeiLen > 0)
   {
-    debugLog("d", "Found SIM card IMEI.");
+    debugLog('d', "Found SIM card IMEI.");
     Serial.println(imei);
   }
   else
   {
-    debugLog("e", "SIM card error. No IMEI Found.");
+    debugLog('e', "SIM card error. No IMEI Found.");
   }
 
   /*
      MPU Setup
   */
+  
     mpu.initialize();
+    /*
     debugLog('d', F("Initializing DMP."));
     devStatus = mpu.dmpInitialize(); // Initialize the DMP, and get its status
+  */
+    // Gyro offsets
+     mpu.setXGyroOffset(-970);
+    mpu.setYGyroOffset(-27);
+    mpu.setZGyroOffset(206);
+    //mpu.setZAccelOffset(1447);
 
-    // Gyro offsets, scaled for min sensitivity
-     mpu.setXGyroOffset(-949);
-    mpu.setYGyroOffset(-29);
-    mpu.setZGyroOffset(188);
-    mpu.setZAccelOffset(1447);
-
+    /*
     // Ensure initialization worked (returns 0 if so)
     // Copied from MPU6050 library example code
     if (devStatus == 0)
@@ -174,6 +197,7 @@ void setup()
      debugLog('e', F("DMP Initialization failed. Code: "));
      debugLog('e', devStatus);
     }
+    */
 
   debugLog('d', F("Setup completed."));
 }
@@ -211,38 +235,49 @@ void loop()
         {
           validGPS = false;
           gpsCounter = 0; // Set it to zero, because why not?
-          debugLog('w', F("Did not receive good GPS data in awhile!"));
+          //debugLog('w', F("Did not receive good GPS data in awhile!"));
         }
       }
     }
 
+    /*
     // Update current FIFO count from the MPU
     fifoCount = mpu.getFIFOCount();
   
     // Check to see if an MPU interrupt is detected, and if the FIFO buffer is full
     if (mpuInterrupt && !fifoCount < packetSize)
     {
-      Serial.println("Interrupt detected!");
+      //Serial.println("Interrupt detected!");
       // reset interrupt flag and get INT_STATUS byte from the MPU
       mpuInterrupt = false;
       mpuIntStatus = mpu.getIntStatus(); // Get interrupt status directly from the MPU. Should be true
       doCheckAccel = true; // We should check the acceleration
     }
 
+    
     // Check for a High-G event
     if ((aaReal.getMagnitude() / 1000) > gAlarmThreshold)
     {
+      highGCounter++;
+      if(highGCounter > highGLowBound && highGCounter < highGUpBound)
+      {
+        
+      }
       debugLog('w', F("High-G event detected!"));
       // TODO: Trigger an SMS Alert
-      fona.sendSMS(phoneNumber, "Impact detected!");
+      //fona.sendSMS(phoneNumber, "Impact detected!");
       //fona.sendSMS(phoneNumber, toMapsLink(getGPS())); // Send a maps link with current location
     }
+    
 
+    
     // Controls checking of acceleration from MPU. Based on flag variable, controlled by interrupt and FIFO size
     if (doCheckAccel)
     {
       checkAccel();
     }
+    */  
+    
   }
 
 }
@@ -264,6 +299,57 @@ void periodicActions()
     smsTimer = millis();
   }
 
+  // Check acceleration from MPU every 100 microseconds
+  if (micros() - mpuMicroTimer > 100)
+  {
+    mpu.getRotation(&gx, &gy, &gz);
+    /*
+    Serial.print(gx); Serial.print("\t");
+    Serial.print(gy); Serial.print("\t");
+    Serial.print(gz); Serial.print("\t");
+    Serial.print(vectorMag()); Serial.print("\t");
+    Serial.print(millis()); Serial.println("\t");
+    */
+
+    if (vectorMag() > gAlarmThreshold)
+    {
+      highGCounter++;
+      prevGAlarm = true;
+      //Serial.println("HIGH G");
+    }
+    else
+    {
+      if (prevGAlarm && highGCounter > 5 && highGCounter < 20)
+      {
+        Serial.println("=========ALARM===========");
+        highGAlarm = true;
+      }
+      highGCounter = 0;
+    }
+
+    mpuMicroTimer = 0;
+  }
+
+  // Check if a High-G alert should be sent every 2 seconds
+  if(millis() - highGAlarmTimer > 500)
+  {
+    if(highGAlarm)
+    {
+      char impactMessage[] = "Impact detected!";
+      fona.sendSMS(phoneNumber, impactMessage);
+
+      // Get the maps link and convert to char array
+      String mapsString = toMapsLink(getGPS());
+      char mapsLink[56];
+      mapsString.toCharArray(mapsLink, 56);
+    
+      fona.sendSMS(phoneNumber, mapsLink); // Send a maps link with current location
+      highGAlarm = false;
+    }
+
+    highGAlarmTimer = 0;
+  }
+
   // Check battery status every five seconds
   if (millis() - battTimer > 5000)
   {
@@ -272,6 +358,7 @@ void periodicActions()
     if (!fona.getBattPercent(&vbat))
     {
       debugLog('w', F("Failed to read battery voltage"));
+      digitalWrite(BATT_STAT_PIN, HIGH);
     }
     else
     {
@@ -358,6 +445,7 @@ void parseAllSMS()
   }
 }
 
+/* // DEPRECATE
 // A utility function to get data from the MPU. Called after an interrupt is processed
 // Checks for FIFO overflow, and if there's sufficient data reads it into the aaReal Struct
 // Stores real acceleration, adjusted to remove gravity
@@ -378,6 +466,7 @@ void checkAccel()
   {
     // Actually read the packet from the FIFO
     mpu.getFIFOBytes(fifoBuffer, packetSize);
+    mpu.resetFIFO();
 
     // track FIFO count here in case there is > 1 packet available
     // (this lets us immediately read more without waiting for an interrupt)
@@ -389,14 +478,15 @@ void checkAccel()
     mpu.dmpGetAccel(&aa, fifoBuffer);
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity); // Stores real acceleration into the aaReal struct
+    
     Serial.print("areal\t");
     Serial.print(aaReal.x);
     Serial.print("\t");
     Serial.print(aaReal.y);
     Serial.print("\t");
     Serial.print(aaReal.z);
-    Serial.print("\t");
-
+    Serial.println("\t");
+    
     // If the buffer size is less than a packet, we can reset and wait for another interrupt
     if (fifoCount < packetSize)
     {
@@ -404,14 +494,7 @@ void checkAccel()
     }
   }
 }
-/*
-// Structure to hold the GPS coordinates
-// Makes it easy to pass around, like some sort of digital hot potato, or deformed kick ball
-struct coordinates
-{
-  float lat;
-  float lon;
-};
+*/
 
 // Reads GPS Data and returns the latitude and longitude
 struct coordinates getGPS()
@@ -439,7 +522,23 @@ String toMapsLink(struct coordinates coord)
   mapLink = "http://www.google.com/maps/place/" + latString + "," + lonString;
   return mapLink;
 }
-*/
+
+
+// A utility function to calculate the magnitude of a vector
+// Takes the gx,gy,gz variables, converts to g's from milli g's
+// Calculates resultant vector and returns it, yo.
+double vectorMag()
+{
+  double sqx = (gx / 1000) * (gx / 1000);
+  double sqy = (gx / 1000) * (gx / 1000);
+  double sqz = (gx / 1000) * (gx / 1000);
+  double asqx = abs(sqx);
+  double asqy = abs(sqy);
+  double asqz = abs(sqz);
+  double magnitude = sqrt(asqx + asqy + asqz); // TODO: Is this going to cause memory problems??
+  return magnitude;
+}
+
 // A helper function to manage logging to the serial console
 // Has 3 log levels: Debug (2, highest), Warn (1, medium), and Error (0, lowest)
 // Always prints errors, and the logging level can be increased to reveal more information
@@ -471,7 +570,7 @@ void parseCommand(String command)
   debugLog('d', "Parsing command: " + command);
   if (command == "foo")
   {
-    digitalWrite(13, HIGH);
+    //digitalWrite(13, HIGH);
     char barArray[] = "bar";
     fona.sendSMS(phoneNumber, barArray);
     debugLog('d', F("Bar"));
@@ -479,9 +578,9 @@ void parseCommand(String command)
   else if (command == "location")
   {
     char mapsLink[56];
-    //toMapsLink(getGPS()).toCharArray(mapsLink, 56);
-    //debugLog('d', mapsLink);
-    //fona.sendSMS(phoneNumber, mapsLink); // Send a maps link with current location
+    toMapsLink(getGPS()).toCharArray(mapsLink, 56);
+    debugLog('d', mapsLink);
+    fona.sendSMS(phoneNumber, mapsLink); // Send a maps link with current location
   }
   else if (command == "dMode0")
   {
