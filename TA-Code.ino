@@ -12,11 +12,9 @@
 #include <Adafruit_FONA.h>
 #include <TinyGPS.h>
 #include <I2Cdev.h>
-//#include "MPU6050_6Axis_MotionApps20.h"
 #include "MPU6050.h"
 #include "Wire.h"
 #include <SoftwareSerial.h>
-//#include <AltSoftSerial.h>
 
 /*************************
    Configuration variables
@@ -35,12 +33,6 @@ const short gpsCounterDefault = 2000; // Number of invalid GPS sentences to acce
 #define MPU_SLC 3
 #define MPU_SDA 2
 
-/*
-// GPS Pin definitions (FEATHER)
-#define GPS_TX 5
-#define GPS_RX 13
-*/
-
 // Status LED Pin definitions
 #define BATT_STAT_PIN 10
 #define CELL_STAT_PIN 11
@@ -53,8 +45,6 @@ Adafruit_FONA fona = Adafruit_FONA(FONA_RST);
 
 // GPS Serial declarations
 TinyGPS gps;
-//SoftwareSerial gpsSS(4, 3); // Standard UNO config
-//AltSoftSerial gpsSS; // Use on feather
 #define gpsSS Serial1
 
 MPU6050 mpu;
@@ -99,7 +89,6 @@ void setup()
   pinMode(BATT_STAT_PIN, OUTPUT);
   pinMode(CELL_STAT_PIN, OUTPUT);
   pinMode(GPS_STAT_PIN, OUTPUT);
-  //pinMode(INTERRUPT_PIN, INPUT);
 
   // Begin serial communications
   Serial.begin(9600);
@@ -139,8 +128,6 @@ void setup()
 
 void loop()
 {
-  // Update variables and stuff BEFORE any periodic actions should happen
-
   // Look for data on the serial bus, and parse it
   if (Serial.available())
   {
@@ -157,7 +144,7 @@ void loop()
     if (gpsSS.available())
     {
       char c = gpsSS.read();
-      //Serial.println(c);
+      //Serial.println(c); // Uncomment to see GPS data flowing in
       if (gps.encode(c)) // Valid GPS sentence has been encoded
       {
         validGPS = true;
@@ -181,8 +168,9 @@ void loop()
 // Actions scheduled to run at certain times, all the millis stuff goes here
 void periodicActions()
 {
-  // Check FONA for new SMS every two seconds
-  if (millis() - smsTimer > 2000)
+  
+  // Check FONA for new SMS every half second
+  if (millis() - smsTimer > 500)
   {
     int8_t smsnum = fona.getNumSMS();
     if (smsnum > 0)
@@ -200,39 +188,42 @@ void periodicActions()
     // Get updated acceleration from the MPU.
     mpu.getRotation(&gx, &gy, &gz); // (Yes I know it looks like gyro, but trust me it's acceleration)
     
-    /*
+      /*
       Serial.print(gx); Serial.print("\t");
       Serial.print(gy); Serial.print("\t");
       Serial.print(gz); Serial.print("\t");
       Serial.print(vectorMag()); Serial.print("\t");
       Serial.print(millis()); Serial.println("\t");
-    */
+      */
 
-    // For every same that rises above the alarm threshold, increment counter
+    // For every sample that rises above the alarm threshold, increment counter
     if (vectorMag() > gAlarmThreshold)
     {
       highGCounter++;
       prevGAlarm = true;
     }
-    else // Falling edge of an acceleration event
+    else // Potential falling edge of an acceleration event
     {
-      // Check to see if the number of samples above threshold is within alarm limits
+      // Check to see if the number of samples that went above threshold is within alarm limits
       if (prevGAlarm && highGCounter > 5 && highGCounter < 20)
       {
-        Serial.println("=========ALARM===========");
-        highGAlarm = true;
+        Serial.println("=========IMPACT===========");
+        highGAlarm = true; // Set flag to send an alarm notification
       }
       highGCounter = 0; // Reset counter
     }
     
-    mpuMicroTimer = millis();
+    mpuMicroTimer = micros();
   }
 
   // Check if a High-G alert should be sent every half second
+  // This eliminates potential duplicate notifications from one impact event
+  // 'Aftershocks' are common, where two peaks will happen in one event, and trigger multiple notifications
   if (millis() - highGAlarmTimer > 500)
   {
     if (highGAlarm)
     {
+      Serial.println("=======ALARM=========");
       char impactMessage[] = "Impact detected!";
       //fona.sendSMS(phoneNumber, impactMessage);
 
@@ -260,7 +251,6 @@ void periodicActions()
     }
     else
     {
-      //Serial.print(F("VPct = ")); Serial.print(vbat); Serial.println(F("%"));
       if (vbat < 20)
       {
         digitalWrite(BATT_STAT_PIN, HIGH);
@@ -295,8 +285,8 @@ void periodicActions()
     if (n == 1 || n == 5)
     {
       //digitalWrite(CELL_STAT_PIN, HIGH);
-      analogWrite(CELL_STAT_PIN, map(s, 2, 31, 0, 255));
-      debugLog('d', "Cell service OK");
+      analogWrite(CELL_STAT_PIN, map(s, 2, 31, 0, 255)); // Maps cell signal level to brightness on LED
+      debugLog('d', F("Cell service OK"));
     }
     else
     {
@@ -319,10 +309,11 @@ void periodicActions()
       digitalWrite(GPS_STAT_PIN, LOW);
       debugLog('w', F("No valid GPS data"));
     }
+    
     gpsTimer = millis();
   }
 
-}
+} // END PERIODIC ACTIONS
 
 /********************************************************************
    SOVIET CODE BLOC. FUNCTION OWNED BY EVERYBODY, LIKE TRUE COMMUNISM.
@@ -420,8 +411,10 @@ void parseCommand(String command)
   }
   else if (command == "location")
   {
+    // Get the maps link and convert to char array
+    String mapsString = toMapsLink(getGPS());
     char mapsLink[56];
-    toMapsLink(getGPS()).toCharArray(mapsLink, 56);
+    mapsString.toCharArray(mapsLink, 56);
     debugLog('d', mapsLink);
     fona.sendSMS(phoneNumber, mapsLink); // Send a maps link with current location
   }

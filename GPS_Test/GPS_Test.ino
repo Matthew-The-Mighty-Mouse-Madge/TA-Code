@@ -62,6 +62,14 @@ void loop()
     //Serial.println(c);
     gps.encode(c);
   }
+/*
+  if(ss.available())
+  {
+    char c = ss.read();
+    //Serial.println(c);
+    gps.encode(c);
+  }
+  */
   /*
   if(digitalRead(5))
   {
