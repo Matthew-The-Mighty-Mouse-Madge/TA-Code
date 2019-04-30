@@ -183,7 +183,7 @@ void periodicActions()
   }
 
   // Check acceleration from MPU every 100 microseconds
-  if (micros() - mpuMicroTimer > 100)
+  if (micros() - mpuMicroTimer > 50)
   {
     // Get updated acceleration from the MPU.
     mpu.getRotation(&gx, &gy, &gz); // (Yes I know it looks like gyro, but trust me it's acceleration)
@@ -197,7 +197,9 @@ void periodicActions()
       */
 
     // For every sample that rises above the alarm threshold, increment counter
-    if (vectorMag() > gAlarmThreshold)
+    double magnitude = vectorMag();
+    //Serial.println(magnitude);
+    if (magnitude > gAlarmThreshold)
     {
       highGCounter++;
       prevGAlarm = true;
@@ -205,7 +207,7 @@ void periodicActions()
     else // Potential falling edge of an acceleration event
     {
       // Check to see if the number of samples that went above threshold is within alarm limits
-      if (prevGAlarm && highGCounter > 5 && highGCounter < 20)
+      if (prevGAlarm && highGCounter > 3 && highGCounter < 15)
       {
         Serial.println("=========IMPACT===========");
         highGAlarm = true; // Set flag to send an alarm notification
@@ -224,15 +226,16 @@ void periodicActions()
     if (highGAlarm)
     {
       Serial.println("=======ALARM=========");
+      digitalWrite(BATT_STAT_PIN, HIGH); // Turns on the battery status light, warning of an impact
       char impactMessage[] = "Impact detected!";
-      //fona.sendSMS(phoneNumber, impactMessage);
+      fona.sendSMS(phoneNumber, impactMessage);
 
       // Get the maps link and convert to char array
       String mapsString = toMapsLink(getGPS());
       char mapsLink[56];
       mapsString.toCharArray(mapsLink, 56);
 
-      //fona.sendSMS(phoneNumber, mapsLink); // Send a maps link with current location
+      fona.sendSMS(phoneNumber, mapsLink); // Send a maps link with current location
       highGAlarm = false;
     }
     
@@ -287,6 +290,7 @@ void periodicActions()
       //digitalWrite(CELL_STAT_PIN, HIGH);
       analogWrite(CELL_STAT_PIN, map(s, 2, 31, 0, 255)); // Maps cell signal level to brightness on LED
       debugLog('d', F("Cell service OK"));
+      Serial.println(s);
     }
     else
     {
@@ -364,9 +368,9 @@ String toMapsLink(struct coordinates coord)
 // Calculates resultant vector and returns it, yo.
 double vectorMag()
 {
-  double sqx = (gx / 1000) * (gx / 1000);
-  double sqy = (gx / 1000) * (gx / 1000);
-  double sqz = (gx / 1000) * (gx / 1000);
+  double sqx = (gx / 2048) * (gx / 2048);
+  double sqy = (gy / 2048) * (gy / 2048);
+  double sqz = (gz / 2048) * (gz / 2048);
   double asqx = abs(sqx);
   double asqy = abs(sqy);
   double asqz = abs(sqz);

@@ -41,6 +41,7 @@ void setup()
 
   Serial.println("Updating internal sensor offsets...");
   // -76	-2359	1688	0	0	0
+  accelgyro.setFullScaleAccelRange(MPU6050_ACCEL_FS_16);
   Serial.print(accelgyro.getXAccelOffset()); Serial.print("\t"); // -76
   Serial.print(accelgyro.getYAccelOffset()); Serial.print("\t"); // -2359
   Serial.print(accelgyro.getZAccelOffset()); Serial.print("\t"); // 1688
@@ -48,9 +49,12 @@ void setup()
   Serial.print(accelgyro.getYGyroOffset()); Serial.print("\t"); // 0
   Serial.print(accelgyro.getZGyroOffset()); Serial.print("\t"); // 0
   Serial.print("\n");
-  accelgyro.setXGyroOffset(-970);
-  accelgyro.setYGyroOffset(-27);
-  accelgyro.setZGyroOffset(206);
+  accelgyro.setXGyroOffset(-861);
+  accelgyro.setYGyroOffset(-36);
+  accelgyro.setZGyroOffset(180);
+  accelgyro.setXAccelOffset(-3097);
+  accelgyro.setYAccelOffset(-417);
+  accelgyro.setZAccelOffset(4421);
   Serial.print(accelgyro.getXAccelOffset()); Serial.print("\t"); // -76
   Serial.print(accelgyro.getYAccelOffset()); Serial.print("\t"); // -2359
   Serial.print(accelgyro.getZAccelOffset()); Serial.print("\t"); // 1688
@@ -79,16 +83,18 @@ void loop()
   //Serial.print(gy); Serial.print("\t");
   //Serial.println(gz);
 
-  if (micros() - microTimer > 100)
+  if (micros() - microTimer > 50)
   {
     accelgyro.getRotation(&gx, &gy, &gz);
+    /*
     Serial.print(gx); Serial.print("\t");
     Serial.print(gy); Serial.print("\t");
     Serial.print(gz); Serial.print("\t");
     Serial.print(vectorMag()); Serial.print("\t");
     Serial.print(millis()); Serial.println("\t");
+    */
 
-    if (vectorMag() > 18)
+    if (vectorMag() > 23)
     {
       counter++;
       prevGAlarm = true;
@@ -96,7 +102,7 @@ void loop()
     }
     else
     {
-      if (prevGAlarm && counter > 5 && counter < 20)
+      if (prevGAlarm && counter > 3 && counter < 15)
       {
         Serial.println("=========ALARM===========");
       }
@@ -120,9 +126,9 @@ int freeRam()
 
 double vectorMag()
 {
-  double sqx = (gx / 1000) * (gx / 1000);
-  double sqy = (gx / 1000) * (gx / 1000);
-  double sqz = (gx / 1000) * (gx / 1000);
+  double sqx = (gx / 2048) * (gx / 2048);
+  double sqy = (gy / 2048) * (gy / 2048);
+  double sqz = (gz / 2048) * (gz / 2048);
   double asqx = abs(sqx);
   double asqy = abs(sqy);
   double asqz = abs(sqz);

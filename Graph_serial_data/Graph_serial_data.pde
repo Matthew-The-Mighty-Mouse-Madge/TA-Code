@@ -55,12 +55,12 @@ void serialEvent (Serial myPort)
     // trim off any whitespace:
     inString = trim(inString);
     // convert to an int and map to the screen height:
-    inByte = float(inString)/1000;
+    inByte = float(inString);
     //println(inByte);
     if(inByte > 28)
     {
       println(inByte);
     }
-    inByte = map(inByte, 0, 100, 0, height);
+    inByte = map(inByte, 0, 58, 0, height);
   }
 }
