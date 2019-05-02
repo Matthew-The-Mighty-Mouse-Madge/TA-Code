@@ -59,7 +59,7 @@ void loop()
   if(Serial1.available())
   {
     char c = Serial1.read();
-    //Serial.println(c);
+    Serial.println(c);
     gps.encode(c);
   }
 /*

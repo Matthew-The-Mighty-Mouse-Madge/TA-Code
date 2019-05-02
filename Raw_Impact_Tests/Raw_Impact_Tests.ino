@@ -86,13 +86,13 @@ void loop()
   if (micros() - microTimer > 50)
   {
     accelgyro.getRotation(&gx, &gy, &gz);
-    /*
+    
     Serial.print(gx); Serial.print("\t");
     Serial.print(gy); Serial.print("\t");
     Serial.print(gz); Serial.print("\t");
     Serial.print(vectorMag()); Serial.print("\t");
     Serial.print(millis()); Serial.println("\t");
-    */
+    
 
     if (vectorMag() > 23)
     {

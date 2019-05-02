@@ -56,6 +56,7 @@ short gpsCounter = gpsCounterDefault; // Counts down with the number of invalid 
 int highGCounter = 0; // Tracks the number of High-G events detected in a row. When this exceeds a certain ammount, an alert is triggered
 bool prevGAlarm = false; // Tells if the acceleration vector was previously in an alarm state
 bool highGAlarm = false; // If a high-G condition is detected, and an alert should be sent
+bool cellLEDStatus = false;
 
 //Timer variables
 unsigned long smsTimer = 0;
@@ -140,12 +141,12 @@ void loop()
   {
     periodicActions(); // Things that shouldn't happen on every loop of the processor
 
-    // Constantly encode GPS data, so that we might get a full sentence when needed
+    // Constantly encodes GPS data, so that we might get a full sentence when needed
     if (gpsSS.available())
     {
       char c = gpsSS.read();
       //Serial.println(c); // Uncomment to see GPS data flowing in
-      if (gps.encode(c)) // Valid GPS sentence has been encoded
+      if (gps.encode(c)) // Encodes the data, returns boolean if valid sentence encoded
       {
         validGPS = true;
         gpsCounter = gpsCounterDefault; // Reset the GPS counter
@@ -187,7 +188,8 @@ void periodicActions()
   {
     // Get updated acceleration from the MPU.
     mpu.getRotation(&gx, &gy, &gz); // (Yes I know it looks like gyro, but trust me it's acceleration)
-    
+
+      // Uncomment to print the raw acceleration data
       /*
       Serial.print(gx); Serial.print("\t");
       Serial.print(gy); Serial.print("\t");
@@ -198,7 +200,6 @@ void periodicActions()
 
     // For every sample that rises above the alarm threshold, increment counter
     double magnitude = vectorMag();
-    //Serial.println(magnitude);
     if (magnitude > gAlarmThreshold)
     {
       highGCounter++;
@@ -257,7 +258,7 @@ void periodicActions()
       if (vbat < 20)
       {
         digitalWrite(BATT_STAT_PIN, HIGH);
-        debugLog('w', F("Battery less than 20%!")); // TODO: Remove console spam
+        debugLog('w', F("Battery less than 20%!"));
       }
       else
       {
@@ -284,17 +285,19 @@ void periodicActions()
 
     // From Adafruit FONA example code
     uint8_t n = fona.getNetworkStatus();
-    uint8_t s = fona.getRSSI();
-    if (n == 1 || n == 5)
+    uint8_t s = fona.getRSSI(); // Signal level
+    if (n == 1 || n == 5) // Checks if network is found
     {
       //digitalWrite(CELL_STAT_PIN, HIGH);
       analogWrite(CELL_STAT_PIN, map(s, 2, 31, 0, 255)); // Maps cell signal level to brightness on LED
       debugLog('d', F("Cell service OK"));
-      Serial.println(s);
+      //Serial.println(s); // Prints signal level to console
     }
     else
     {
-      digitalWrite(CELL_STAT_PIN, LOW);
+      // Blinks the LED to indicate power is on, but no signal is found
+      cellLEDStatus = !cellLEDStatus;
+      digitalWrite(CELL_STAT_PIN, cellLEDStatus);
       debugLog('w', F("No cell service."));
     }
     cellServiceTimer = millis();
